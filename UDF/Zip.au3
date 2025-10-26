@@ -106,11 +106,19 @@ Func _Zip_AddFolder($hZipFile, $hFolder, $flag = 1); Added error handling - Nice
     $oApp = ObjCreate("Shell.Application")
     
     Local $oZipFolder = $oApp.NameSpace($hZipFile)
-    If Not IsObj($oZipFolder) Then Return SetError(5, 0, "Unable to get Shell Folder for ZIP file (possibly corrupt)") ;unable to get Shell Folder for zip file
+	If Not IsObj($oZipFolder) Then
+		MsgBox(0, "ZIP Error", "Unable to get Shell Folder for ZIP file (possibly corrupt)")
+		Return SetError(5, 0, "Unable to get Shell Folder for ZIP file (possibly corrupt)")	
+	EndIf; unable to get Shell Folder for zip file
     
     Local $oFolder = $oApp.Namespace($hFolder)
-    If Not IsObj($oFolder) Then Return SetError(6, 0, "Unable to get Shell Folder for folder to be added (possibly missing)") ;unable to get Shell Folder for folder to be added
     
+	If Not IsObj($oFolder) Then
+		MsgBox(0, "ZIP Error", "Unable to get Shell Folder for folder to be added (possibly missing)")
+		Return SetError(6, 0, "Unable to get Shell Folder for folder to be added (possibly missing)") ;unable to get Shell Folder for folder to be added
+	EndIf
+
+
     $oCopy = $oZipFolder.CopyHere($oFolder)
     While 1
         If $flag = 1 then _Hide()
@@ -190,6 +198,9 @@ Func _Zip_Delete($hZipFile, $hFilename, $flag = 1)
 	FileDelete($hZipFile)
 	_Zip_Create($hZipFile)
 	_Zip_AddFolderContents($hZipFile, $dir, $flag)
+	If not @error == 0 Then
+		MsgBox(0, "ZIP Error", "_ZIP_AddFolderContents error = " & @error)
+	EndIf
 	DirRemove($dir)
 EndFunc
 
@@ -293,6 +304,9 @@ Func _Zip_Count($hZipFile)
 	If not _IsFullPath($hZipFile) then Return SetError(4,0,"ZIP file path is not a full path") ;zip file isn't a full path
 	If Not FileExists($hZipFile) Then Return SetError(1, 0, "ZIP file does not exist") ;no zip file
 	$items = _Zip_List($hZipFile)
+	if not @error == 0 Then
+		MsgBox(0, "ZIP ERROR", "_ZIP_List error = " & @error)
+	EndIf
 	Return UBound($items) - 1
 EndFunc   ;==>_Zip_Count
 

@@ -937,6 +937,9 @@ Func backupServer()
 			setServerStatus($COLOR_ORANGE, "Zipping files")
 			logWrite(0, "Zipping...")
 			_Zip_AddFolder($backupFile, $backupFolderName, 0)
+			if not @error == 0 Then
+				MsgBox(0, "ZIP Error", "ZIP error "& @error)
+			EndIf
 			DirRemove($backupFolderName, 1)
 		EndIf
 

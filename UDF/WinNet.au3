@@ -53,7 +53,10 @@ Func httpPOST($url, $body, $mimeType)
     ; we want hostname to be the domain (NO "HTTPS://")
     ; and uri = /api/webhook/... or ect
 
+    if $url == "" Then Return
+
     $urlParts = StringSplit($url, "/")
+    ;~ MsgBox(0, "", $urlParts)
     $hostname = $urlParts[2] & $urlParts[3]
     $uri = StringReplace($url, $hostname, "")
     $uri = StringReplace($uri, "https://", "")

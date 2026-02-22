@@ -131,6 +131,12 @@ Global $serverRunning = False
 Global $BDS_process = Null
 Global $zipMessageDotsCount = 0
 Global $currentServerStatus = "Offline"
+Global $discordCmdLastMessageId = "0"
+Global $discordCmdPollBusy = False
+Global $cfg_discCmdInputEnabled = "False"
+Global $cfg_discBotToken = ""
+Global $cfg_discCommandChannelId = ""
+Global $cfg_discAllowedCommands = "list,say,tell,whitelist,reload,time,weather,gamerule,difficulty,kick,ban,pardon,op,deop,stop,save hold,save query,save resume"
 
 ;Functions (Server Status) #############################################################################
 
@@ -212,6 +218,11 @@ Func loadConf()
 	Global $cfg_discConsoleUrl = IniRead($settingsFile, "discordIntegration", "consoleUrl", "")
 	GUICtrlSetData($gui_discConsoleInput, $cfg_discConsoleUrl)
 
+	Global $cfg_discCmdInputEnabled = IniRead($settingsFile, "discordIntegration", "commandInputEnabled", "False")
+	Global $cfg_discBotToken = IniRead($settingsFile, "discordIntegration", "botToken", "")
+	Global $cfg_discCommandChannelId = IniRead($settingsFile, "discordIntegration", "commandChannelId", "")
+	Global $cfg_discAllowedCommands = IniRead($settingsFile, "discordIntegration", "allowedCommands", "list,say,tell,whitelist,reload,time,weather,gamerule,difficulty,kick,ban,pardon,op,deop,stop,save hold,save query,save resume")
+
 	Global $cfg_verboseLogging = IniRead($settingsFile, "debug", "verboseLogging", "False")
 
 	Global $cfg_zipServerBackup = IniRead($settingsFile, "autoRestart", "zipServerBackup", "False")
@@ -278,6 +289,11 @@ Func saveConf()
 
 	$cfg_discConsoleUrl = GUICtrlRead($gui_discConsoleInput)
 	IniWrite($settingsFile, "discordIntegration", "consoleUrl", $cfg_discConsoleUrl)
+
+	IniWrite($settingsFile, "discordIntegration", "commandInputEnabled", $cfg_discCmdInputEnabled)
+	IniWrite($settingsFile, "discordIntegration", "botToken", $cfg_discBotToken)
+	IniWrite($settingsFile, "discordIntegration", "commandChannelId", $cfg_discCommandChannelId)
+	IniWrite($settingsFile, "discordIntegration", "allowedCommands", $cfg_discAllowedCommands)
 
 	$cfg_zipServerBackup = GUICtrlRead($gui_zipServerBackup)
 	If $cfg_zipServerBackup = $GUI_CHECKED Then
@@ -517,6 +533,88 @@ Func outputToDiscNotif($content) ;Sends server notfications to Discord webhook
 	EndIf
 EndFunc   ;==>outputToDiscNotif
 
+Func _isSnowflakeNewer($leftId, $rightId)
+	If $rightId = "0" Then Return True
+	If StringLen($leftId) > StringLen($rightId) Then Return True
+	If StringLen($leftId) < StringLen($rightId) Then Return False
+	Return StringCompare($leftId, $rightId) = 1
+EndFunc   ;==>_isSnowflakeNewer
+
+Func _isDiscordCommandAllowed($command)
+	Local $commandTrimmed = StringStripWS($command, 3)
+	If $commandTrimmed = "" Then Return False
+	Local $allowedList = StringSplit(StringLower($cfg_discAllowedCommands), ",")
+	Local $commandLower = StringLower($commandTrimmed)
+	For $i = 1 To $allowedList[0]
+		Local $allowedItem = StringStripWS($allowedList[$i], 3)
+		If $allowedItem = "" Then ContinueLoop
+		If StringLeft($commandLower, StringLen($allowedItem)) = $allowedItem Then
+			If StringLen($commandLower) = StringLen($allowedItem) Or StringMid($commandLower, StringLen($allowedItem) + 1, 1) = " " Then Return True
+		EndIf
+	Next
+	Return False
+EndFunc   ;==>_isDiscordCommandAllowed
+
+Func pollDiscordCommands()
+	If $discordCmdPollBusy Then Return
+	If $cfg_discCmdInputEnabled <> "True" Then Return
+	If $cfg_discBotToken = "" Or $cfg_discCommandChannelId = "" Then Return
+	If $serverRunning = False Then Return
+
+	$discordCmdPollBusy = True
+	Local $headers = "Authorization: Bot " & $cfg_discBotToken & @CRLF & "User-Agent: " & $guiTitle & @CRLF
+	Local $url = "https://discord.com/api/v10/channels/" & $cfg_discCommandChannelId & "/messages?limit=10"
+	Local $response = httpGETWithHeaders($url, $headers)
+
+	If $response = "" Or StringLeft($response, 1) <> "[" Then
+		$discordCmdPollBusy = False
+		Return
+	EndIf
+
+	Local $messages = StringSplit($response, '"id":"', 1)
+	If $messages[0] < 2 Then
+		$discordCmdPollBusy = False
+		Return
+	EndIf
+
+	For $i = $messages[0] To 2 Step -1
+		Local $chunk = $messages[$i]
+		Local $idParts = StringSplit($chunk, '"', 1)
+		If $idParts[0] = 0 Then ContinueLoop
+		Local $msgId = $idParts[1]
+		If Not _isSnowflakeNewer($msgId, $discordCmdLastMessageId) Then ContinueLoop
+
+		If StringInStr($chunk, '"webhook_id"') Then ContinueLoop
+		If StringInStr($chunk, '"bot":true') Then ContinueLoop
+
+		Local $contentParts = StringSplit($chunk, '"content":"', 1)
+		If $contentParts[0] < 2 Then
+			$discordCmdLastMessageId = $msgId
+			ContinueLoop
+		EndIf
+		Local $contentSplit = StringSplit($contentParts[2], '","', 1)
+		If $contentSplit[0] = 0 Then
+			$discordCmdLastMessageId = $msgId
+			ContinueLoop
+		EndIf
+
+		Local $content = StringStripWS(StringReplace(StringReplace(StringReplace($contentSplit[1], "\n", " "), "\r", " "), '\"', '"'), 3)
+		If StringLeft($content, 4) = "!mc " Then
+			Local $cmd = StringStripWS(StringTrimLeft($content, 4), 3)
+			If _isDiscordCommandAllowed($cmd) Then
+				sendServerCommand($cmd)
+				outputToConsole("Executed Discord command: '" & $cmd & "'")
+			Else
+				outputToConsole("Blocked Discord command: '" & $cmd & "'")
+			EndIf
+		EndIf
+
+		$discordCmdLastMessageId = $msgId
+	Next
+
+	$discordCmdPollBusy = False
+EndFunc   ;==>pollDiscordCommands
+
 ;Functions (Misc) ##################################################################################
 
 Func UploadLog()
@@ -553,7 +651,9 @@ Func startup()
 
 	;Register scheduled actions
 	AdlibRegister("ScheduledActions", 60 * 1000) ;every minute
+	AdlibRegister("pollDiscordCommands", 3000) ;every 3 seconds
 	logWrite(0, "Auto restart scheduled actions registered.")
+	logWrite(0, "Discord command polling registered.")
 
 	;In case the script crashes or unexpectedly closes
 	OnAutoItExitRegister("closeBDS")
@@ -579,6 +679,7 @@ EndFunc   ;==>startup
 Func exitScript()
 	logWrite(0, "Exiting script...")
 	AdlibUnRegister("ScheduledActions")
+	AdlibUnRegister("pollDiscordCommands")
 	If $BDS_process = Null Then ;stopServer has closed it properly
 		logWrite(0, "BDS Process isn't running. Closing script")
 	ElseIf ProcessExists($BDS_process) Then

@@ -38,6 +38,48 @@ EndFunc   ;==> httpGET()
 
 ;===============================================================================
 ;
+; Function Name:    httpGETWithHeaders()
+; Description:      Sends a http GET request with optional headers.
+; Parameter(s):     $url - Where you want the GET request
+;                   $headers - Optional headers separated by CRLF
+; Requirement(s):   WinINet.dll - Default on windows.
+; Return Value(s):  Returns the data from the URL, as a string
+;
+;===============================================================================
+Func httpGETWithHeaders($url, $headers = "")
+    If $url == "" Then Return ""
+
+    Local $urlParts = StringSplit($url, "/")
+    If $urlParts[0] < 3 Then Return ""
+
+    Local $hostname = $urlParts[3]
+    Local $uri = StringReplace($url, "https://" & $hostname, "")
+    If $uri = "" Then $uri = "/"
+
+    Local $hInternet = DllCall("wininet.dll", "ptr", "InternetOpen", "str", $User_Agent, "dword", 1, "ptr", 0, "ptr", 0, "dword", 0)
+    Local $hConnect = DllCall("wininet.dll", "ptr", "InternetConnect", "ptr", $hInternet[0], "str", $hostname, "ushort", 443, "str", "", "str", "", "dword", 3, "dword", 0, "ptr", 0)
+    Local $hRequest = DllCall("wininet.dll", "ptr", "HttpOpenRequest", "ptr", $hConnect[0], "str", "GET", "str", $uri, "str", "HTTP/1.1", "ptr", 0, "ptr", 0, "dword", BitOR(0x80000000, 0x00800000), "ptr", 0)
+
+    DllCall("wininet.dll", "bool", "HttpSendRequest", "ptr", $hRequest[0], "str", $headers, "dword", StringLen($headers), "ptr", 0, "dword", 0)
+    Local $sBuffer = ""
+    Local $aRead
+
+    Do
+        $aRead = DllCall("wininet.dll", "bool", "InternetReadFile", "ptr", $hRequest[0], "ptr", DllStructCreate("char[1024]"), "dword", 1024, "dword*", 0)
+        If $aRead[4] > 0 Then
+            $sBuffer &= BinaryToString(DllStructGetData($aRead[2], 1), 4)
+        EndIf
+    Until $aRead[4] = 0
+
+    DllCall("wininet.dll", "bool", "InternetCloseHandle", "ptr", $hRequest[0])
+    DllCall("wininet.dll", "bool", "InternetCloseHandle", "ptr", $hConnect[0])
+    DllCall("wininet.dll", "bool", "InternetCloseHandle", "ptr", $hInternet[0])
+
+    Return $sBuffer
+EndFunc   ;==> httpGETWithHeaders()
+
+;===============================================================================
+;
 ; Function Name:    httpPOST()
 ; Description:      Sends a post request to the url
 ; Parameter(s):     $url - Endpoint for the POST request

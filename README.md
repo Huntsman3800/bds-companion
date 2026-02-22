@@ -40,6 +40,29 @@ You can find the latest release [here](https://www.minecraft.net/en-us/download/
 - ⚫ Black: The debug tab. Only use these if something is broken!
 - 🟣 Purple: Save settings button. Make sure you save before leaving the tab!
 
+
+### Discord command input (optional)
+
+BDS-Companion can optionally poll a Discord channel using a Bot token and execute messages that start with `!mc `.
+
+1. Create a Discord bot and invite it to your server with **Read Message History** permission in an admin-only channel.
+2. In `settings.ini` under `[discordIntegration]`, set:
+   - `commandInputEnabled=True`
+   - `botToken=YOUR_DISCORD_BOT_TOKEN`
+   - `commandChannelId=YOUR_CHANNEL_ID`
+   - Optionally edit `allowedCommands` (comma-separated prefixes).
+3. Save and restart BDS-Companion.
+
+Example Discord message:
+```
+!mc say Hello from Discord
+```
+
+Safety notes:
+- Keep this to a private admin channel only.
+- Never share your bot token.
+- Only commands matching `allowedCommands` are forwarded.
+
 ## Troubleshooting
 
 - ### <b>Q:</b> My PC says this is a virus! </br> 
